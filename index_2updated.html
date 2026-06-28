@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#07241A" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>LeafDoctor</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    /* Canopy palette */
+    --forest-900: #07241A;
+    --forest-800: #0B3D2E;
+    --forest-700: #115E43;
+    --leaf-500:   #2FA56A;
+    --lime-400:   #A3E635;
+    --lime-300:   #BEF264;
+    --paper:      #F6FAF4;
+    --ink:        #0A1F17;
+    --muted:      #5B6B63;
+
+    /* status colors */
+    --c-healthy: #34D399;
+    --c-stress:  #FBBF24;
+    --c-disease: #FB7185;
+    --c-dead:    #94A3B8;
+
+    --glass:       rgba(255,255,255,0.08);
+    --glass-line:  rgba(255,255,255,0.16);
+    --glass-strong: rgba(255,255,255,0.14);
+
+    /* System font stacks — no external dependency, works offline */
+    --font-display: "Nunito", "Varela Round", ui-rounded, "SF Pro Rounded",
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --font-body:    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+                    "Helvetica Neue", Arial, system-ui, sans-serif;
+
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: var(--font-body);
+    background: #03140E;
+    color: var(--paper);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  /* Phone frame — fills screen on mobile, looks like a device on desktop */
+  .device {
+    position: relative;
+    width: 100%;
+    max-width: 440px;
+    height: 100vh;
+    max-height: 940px;
+    background:
+      radial-gradient(120% 60% at 80% -10%, rgba(163,230,53,0.18), transparent 60%),
+      radial-gradient(120% 70% at -20% 10%, rgba(47,165,106,0.22), transparent 55%),
+      linear-gradient(180deg, var(--forest-900) 0%, #04150F 100%);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 40px 120px rgba(0,0,0,0.6);
+  }
+  @media (min-width: 480px) {
+    .device { border-radius: 40px; height: 92vh; border: 1px solid rgba(255,255,255,0.06); }
+  }
+
+  /* ambient drifting leaf glow */
+  .device::before {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(40% 30% at 20% 80%, rgba(47,165,106,0.16), transparent 70%),
+      radial-gradient(30% 20% at 90% 70%, rgba(163,230,53,0.10), transparent 70%);
+    pointer-events: none;
+    animation: drift 14s ease-in-out infinite alternate;
+  }
+  @keyframes drift { from { transform: translateY(0) scale(1); } to { transform: translateY(-12px) scale(1.04); } }
+
+  /* ============ APP HEADER ============ */
+  .appbar {
+    position: relative; z-index: 5;
+    padding: calc(var(--safe-top) + 16px) 20px 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .mark {
+    width: 34px; height: 34px; border-radius: 11px;
+    background: linear-gradient(135deg, var(--lime-400), var(--leaf-500));
+    display: grid; place-items: center; font-size: 18px;
+    box-shadow: 0 6px 18px rgba(163,230,53,0.35);
+  }
+  .brand .name {
+    font-family: var(--font-display); font-weight: 800; font-size: 19px; letter-spacing: -0.3px;
+  }
+  .brand .name b { color: var(--lime-300); font-weight: 800; }
+
+  .status-pill {
+    display: flex; align-items: center; gap: 7px;
+    background: var(--glass); border: 1px solid var(--glass-line);
+    padding: 7px 11px; border-radius: 999px; font-size: 11px; font-weight: 600;
+    color: rgba(255,255,255,0.85); backdrop-filter: blur(12px);
+  }
+  .status-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c-dead); box-shadow: 0 0 0 0 rgba(148,163,184,0.6); }
+  .status-pill.ready .dot { background: var(--c-healthy); animation: pulse 2s infinite; }
+  .status-pill.demo .dot { background: var(--c-stress); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%{ box-shadow: 0 0 0 0 currentColor; } 70%{ box-shadow: 0 0 0 6px transparent; } 100%{ box-shadow: 0 0 0 0 transparent; } }
+
+  /* ============ SCREEN SYSTEM ============ */
+  .stage { position: relative; flex: 1; min-height: 0; }
+  .screen {
+    position: absolute; inset: 0;
+    padding: 4px 20px 16px;
+    overflow-y: auto;
+    opacity: 0; transform: translateY(8px) scale(0.99);
+    pointer-events: none;
+    transition: opacity 0.32s ease, transform 0.32s ease;
+    -webkit-overflow-scrolling: touch;
+  }
+  .screen.active { opacity: 1; transform: none; pointer-events: auto; }
+  .screen::-webkit-scrollbar { width: 0; }
+
+  /* ============ SCAN SCREEN ============ */
+  .scan-hero { text-align: center; margin: 2px 0 14px; }
+  .scan-hero h1 {
+    font-family: var(--font-display); font-weight: 800; font-size: 26px; line-height: 1.1; letter-spacing: -0.6px;
+  }
+  .scan-hero p { color: rgba(255,255,255,0.6); font-size: 13.5px; margin-top: 6px; }
+
+  /* viewport / scanner */
+  .viewport {
+    position: relative;
+    width: 100%; aspect-ratio: 1/1;
+    border-radius: 28px; overflow: hidden;
+    background:
+      radial-gradient(circle at 50% 45%, rgba(47,165,106,0.18), transparent 60%),
+      #06231A;
+    border: 1px solid var(--glass-line);
+    display: grid; place-items: center;
+    box-shadow: inset 0 0 60px rgba(0,0,0,0.4);
+  }
+  .viewport canvas, .viewport video { width: 100% !important; height: 100% !important; object-fit: cover; display: block; }
+
+  .vp-placeholder { text-align: center; color: rgba(255,255,255,0.55); padding: 20px; }
+  .vp-placeholder .leaf {
+    font-size: 50px; display: block; margin-bottom: 10px;
+    animation: float 3.5s ease-in-out infinite;
+  }
+  @keyframes float { 0%,100%{ transform: translateY(0) rotate(-4deg);} 50%{ transform: translateY(-8px) rotate(4deg);} }
+  .vp-placeholder p { font-size: 13px; max-width: 200px; margin: 0 auto; line-height: 1.5; }
+
+  /* focus frame + scanner overlay */
+  .reticle { position: absolute; inset: 0; pointer-events: none; }
+  .reticle .corner { position: absolute; width: 30px; height: 30px; border: 3px solid var(--lime-400); opacity: 0.9; }
+  .reticle .corner.tl { top: 26px; left: 26px; border-right: none; border-bottom: none; border-radius: 10px 0 0 0; }
+  .reticle .corner.tr { top: 26px; right: 26px; border-left: none; border-bottom: none; border-radius: 0 10px 0 0; }
+  .reticle .corner.bl { bottom: 26px; left: 26px; border-right: none; border-top: none; border-radius: 0 0 0 10px; }
+  .reticle .corner.br { bottom: 26px; right: 26px; border-left: none; border-top: none; border-radius: 0 0 10px 0; }
+
+  .scanbeam {
+    position: absolute; left: 8%; right: 8%; height: 3px; top: 10%;
+    background: linear-gradient(90deg, transparent, var(--lime-400), transparent);
+    box-shadow: 0 0 16px 2px rgba(163,230,53,0.7);
+    border-radius: 3px; opacity: 0;
+  }
+  .viewport.scanning .scanbeam { opacity: 1; animation: sweep 1.6s ease-in-out infinite; }
+  @keyframes sweep { 0%{ top: 12%; } 50%{ top: 86%; } 100%{ top: 12%; } }
+
+  .viewport.live .reticle .corner { animation: cornerGlow 2.4s ease-in-out infinite; }
+  @keyframes cornerGlow { 0%,100%{ opacity: 0.5; } 50%{ opacity: 1; } }
+
+  /* analyzing overlay */
+  .analyze {
+    position: absolute; inset: 0; display: none; place-items: center;
+    background: rgba(4,21,15,0.55); backdrop-filter: blur(3px);
+  }
+  .analyze.show { display: grid; }
+  .analyze .spinner {
+    width: 64px; height: 64px; border-radius: 50%;
+    border: 4px solid rgba(255,255,255,0.15); border-top-color: var(--lime-400);
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .analyze .lbl { position: absolute; bottom: 28%; font-size: 13px; font-weight: 600; color: var(--lime-300); letter-spacing: 0.5px; }
+
+  /* controls under viewport */
+  .controls { display: flex; align-items: center; justify-content: center; gap: 26px; margin-top: 22px; }
+
+  .icon-btn {
+    width: 54px; height: 54px; border-radius: 18px;
+    background: var(--glass); border: 1px solid var(--glass-line);
+    color: var(--paper); font-size: 20px;
+    display: grid; place-items: center; cursor: pointer;
+    backdrop-filter: blur(12px); transition: transform 0.12s ease, background 0.2s ease;
+  }
+  .icon-btn:active { transform: scale(0.9); background: var(--glass-strong); }
+  .icon-btn .sub { display:none; }
+
+  /* shutter — the signature control */
+  .shutter {
+    position: relative; width: 86px; height: 86px; border-radius: 50%;
+    border: none; cursor: pointer; background: transparent;
+    display: grid; place-items: center;
+  }
+  .shutter .ring {
+    position: absolute; inset: 0; border-radius: 50%;
+    border: 3px solid rgba(163,230,53,0.5);
+    animation: haloSpin 6s linear infinite;
+  }
+  .shutter .ring::before {
+    content:""; position:absolute; inset:-3px; border-radius:50%;
+    border: 3px solid transparent; border-top-color: var(--lime-400); border-right-color: var(--lime-400);
+  }
+  @keyframes haloSpin { to { transform: rotate(360deg); } }
+  .shutter .core {
+    width: 66px; height: 66px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--lime-400), var(--leaf-500));
+    display: grid; place-items: center; font-size: 26px;
+    box-shadow: 0 10px 30px rgba(163,230,53,0.4), inset 0 2px 6px rgba(255,255,255,0.4);
+    transition: transform 0.12s ease;
+  }
+  .shutter:active .core { transform: scale(0.88); }
+  .shutter[disabled] { opacity: 0.45; cursor: not-allowed; }
+  .shutter[disabled] .ring { animation: none; }
+
+  .controls .label { position: absolute; bottom: -2px; }
+
+  .hint {
+    text-align: center; font-size: 12px; color: rgba(255,255,255,0.45);
+    margin-top: 16px;
+  }
+
+  /* ============ GUIDE SCREEN ============ */
+  .page-title { font-family: var(--font-display); font-weight: 800; font-size: 24px; letter-spacing: -0.5px; margin: 6px 0 2px; }
+  .page-sub { color: rgba(255,255,255,0.55); font-size: 13px; margin-bottom: 16px; }
+
+  .cat-card {
+    background: var(--glass); border: 1px solid var(--glass-line);
+    border-radius: 20px; padding: 16px; margin-bottom: 12px;
+    backdrop-filter: blur(12px);
+    border-left: 4px solid var(--cat, var(--leaf-500));
+    position: relative; overflow: hidden;
+  }
+  .cat-card .cat-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .cat-card .cat-ic {
+    width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center;
+    font-size: 22px; background: color-mix(in srgb, var(--cat) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--cat) 45%, transparent);
+  }
+  .cat-card .cat-name { font-family: var(--font-display); font-weight: 700; font-size: 16px; }
+  .cat-card .cat-tag { font-size: 11px; color: var(--cat); font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; }
+  .cat-card ul { list-style: none; margin-top: 4px; }
+  .cat-card li {
+    font-size: 12.5px; color: rgba(255,255,255,0.72); line-height: 1.5;
+    padding-left: 16px; position: relative; margin-bottom: 3px;
+  }
+  .cat-card li::before { content: ""; position: absolute; left: 0; top: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--cat); }
+
+  /* ============ ABOUT SCREEN ============ */
+  .about-hero {
+    background: var(--glass); border: 1px solid var(--glass-line);
+    border-radius: 22px; padding: 22px; text-align: center; margin-bottom: 14px;
+    backdrop-filter: blur(12px);
+  }
+  .about-hero .big { font-size: 46px; }
+  .about-hero h2 { font-family: var(--font-display); font-weight: 800; font-size: 22px; margin: 8px 0 4px; }
+  .about-hero p { font-size: 13px; color: rgba(255,255,255,0.7); line-height: 1.6; }
+  .stat-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 14px; }
+  .stat {
+    background: var(--glass); border: 1px solid var(--glass-line); border-radius: 16px;
+    padding: 14px 8px; text-align: center; backdrop-filter: blur(12px);
+  }
+  .stat .n { font-family: var(--font-display); font-weight: 800; font-size: 20px; color: var(--lime-300); }
+  .stat .l { font-size: 10px; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+  .steps { background: var(--glass); border: 1px solid var(--glass-line); border-radius: 20px; padding: 18px; backdrop-filter: blur(12px); }
+  .steps h3 { font-family: var(--font-display); font-size: 15px; margin-bottom: 12px; }
+  .step { display: flex; gap: 12px; margin-bottom: 12px; }
+  .step:last-child { margin-bottom: 0; }
+  .step .num {
+    flex-shrink: 0; width: 26px; height: 26px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--lime-400), var(--leaf-500));
+    color: var(--forest-900); font-weight: 800; font-size: 13px;
+    display: grid; place-items: center; font-family: var(--font-display);
+  }
+  .step .txt { font-size: 12.5px; color: rgba(255,255,255,0.78); line-height: 1.5; padding-top: 3px; }
+
+  /* ============ BOTTOM NAV ============ */
+  .tabbar {
+    position: relative; z-index: 6; flex-shrink: 0;
+    display: flex; justify-content: space-around; align-items: center;
+    padding: 10px 14px calc(var(--safe-bottom) + 12px);
+    background: rgba(4,21,15,0.6); backdrop-filter: blur(20px);
+    border-top: 1px solid var(--glass-line);
+  }
+  .tab {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    background: none; border: none; cursor: pointer;
+    color: rgba(255,255,255,0.45); font-family: var(--font-body); font-size: 10.5px; font-weight: 600;
+    padding: 6px 18px; border-radius: 14px; transition: color 0.2s ease;
+  }
+  .tab .ti { font-size: 20px; transition: transform 0.2s ease; }
+  .tab.active { color: var(--lime-300); }
+  .tab.active .ti { transform: translateY(-2px) scale(1.08); }
+
+  /* ============ RESULT SHEET ============ */
+  .scrim {
+    position: absolute; inset: 0; z-index: 20;
+    background: rgba(2,12,8,0.5); backdrop-filter: blur(2px);
+    opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+  }
+  .scrim.show { opacity: 1; pointer-events: auto; }
+
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 21;
+    background: linear-gradient(180deg, #0C2D21 0%, #071F16 100%);
+    border-radius: 30px 30px 0 0;
+    border-top: 1px solid var(--glass-line);
+    padding: 12px 22px calc(var(--safe-bottom) + 22px);
+    transform: translateY(110%);
+    transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+    max-height: 88%; overflow-y: auto;
+    box-shadow: 0 -20px 60px rgba(0,0,0,0.5);
+  }
+  .sheet.show { transform: translateY(0); }
+  .sheet::-webkit-scrollbar { width: 0; }
+  .grabber { width: 40px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.2); margin: 0 auto 16px; }
+
+  .result-top { display: flex; align-items: center; gap: 16px; }
+  .ring-wrap { position: relative; width: 96px; height: 96px; flex-shrink: 0; }
+  .ring-wrap svg { transform: rotate(-90deg); }
+  .ring-wrap .track { stroke: rgba(255,255,255,0.1); }
+  .ring-wrap .fill { stroke: var(--cat, var(--lime-400)); stroke-linecap: round; transition: stroke-dashoffset 0.9s cubic-bezier(0.16,1,0.3,1); }
+  .ring-wrap .pct {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    font-family: var(--font-display); font-weight: 800; font-size: 24px;
+  }
+  .result-id { flex: 1; }
+  .result-id .tag { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--cat, var(--lime-300)); }
+  .result-id .nm { font-family: var(--font-display); font-weight: 800; font-size: 24px; line-height: 1.1; margin-top: 2px; }
+  .result-id .em { font-size: 22px; }
+
+  .advice {
+    background: var(--glass); border: 1px solid var(--glass-line);
+    border-left: 3px solid var(--cat, var(--lime-400));
+    border-radius: 16px; padding: 14px 16px; margin: 18px 0 16px;
+    font-size: 13.5px; line-height: 1.6; color: rgba(255,255,255,0.88);
+  }
+
+  /* hydration gauge */
+  .hydro {
+    margin-top: 18px;
+    background: linear-gradient(135deg, rgba(56,189,248,0.12), rgba(56,189,248,0.04));
+    border: 1px solid rgba(56,189,248,0.28);
+    border-radius: 16px; padding: 14px 16px;
+  }
+  .hydro-head { display: flex; align-items: center; gap: 12px; }
+  .hydro-ic { font-size: 26px; line-height: 1; }
+  .hydro-meta { flex: 1; display: flex; flex-direction: column; }
+  .hydro-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: rgba(255,255,255,0.55); font-weight: 700; }
+  .hydro-note { font-size: 13px; font-weight: 600; color: #7DD3FC; margin-top: 2px; }
+  .hydro-val { font-family: var(--font-display); font-weight: 800; font-size: 26px; color: #38BDF8; font-variant-numeric: tabular-nums; }
+  .hydro-track { height: 10px; border-radius: 6px; background: rgba(255,255,255,0.08); overflow: hidden; margin-top: 12px; }
+  .hydro-fill {
+    height: 100%; width: 0; border-radius: 6px;
+    background: linear-gradient(90deg, #0EA5E9, #38BDF8, #7DD3FC);
+    transition: width 0.9s cubic-bezier(0.16,1,0.3,1);
+  }
+
+  .breakdown-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: rgba(255,255,255,0.5); font-weight: 700; margin-bottom: 10px; }
+  .bd-item { margin-bottom: 11px; }
+  .bd-row { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 600; margin-bottom: 5px; }
+  .bd-row .v { color: rgba(255,255,255,0.6); font-variant-numeric: tabular-nums; }
+  .bd-track { height: 8px; border-radius: 5px; background: rgba(255,255,255,0.08); overflow: hidden; }
+  .bd-fill { height: 100%; border-radius: 5px; width: 0; transition: width 0.8s cubic-bezier(0.16,1,0.3,1); }
+
+  .sheet-actions { margin-top: 22px; }
+  .btn-block {
+    width: 100%; padding: 16px; border: none; border-radius: 16px; cursor: pointer;
+    font-family: var(--font-display); font-weight: 700; font-size: 15px;
+    background: linear-gradient(135deg, var(--lime-400), var(--leaf-500));
+    color: var(--forest-900); transition: transform 0.12s ease;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-block:active { transform: scale(0.97); }
+
+  /* ============ SETTINGS SHEET ============ */
+  .set-sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 31;
+    background: linear-gradient(180deg, #0C2D21 0%, #071F16 100%);
+    border-radius: 30px 30px 0 0; border-top: 1px solid var(--glass-line);
+    padding: 12px 22px calc(var(--safe-bottom) + 24px);
+    transform: translateY(110%); transition: transform 0.42s cubic-bezier(0.16,1,0.3,1);
+    max-height: 90%; overflow-y: auto;
+  }
+  .set-sheet.show { transform: translateY(0); }
+  .set-sheet h3 { font-family: var(--font-display); font-weight: 800; font-size: 20px; margin-bottom: 4px; }
+  .set-sheet .sub { font-size: 12.5px; color: rgba(255,255,255,0.55); margin-bottom: 18px; }
+
+  .field-label { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.7); margin: 14px 0 7px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .url-input {
+    width: 100%; padding: 14px; border-radius: 14px;
+    background: rgba(255,255,255,0.06); border: 1px solid var(--glass-line);
+    color: var(--paper); font-family: var(--font-body); font-size: 13px; outline: none;
+    transition: border 0.2s ease;
+  }
+  .url-input:focus { border-color: var(--lime-400); }
+  .url-input::placeholder { color: rgba(255,255,255,0.35); }
+
+  .seg { display: flex; gap: 8px; }
+  .lang-seg { flex-wrap: wrap; }
+  .lang-seg button { flex: 1 1 28%; min-width: 86px; }
+  .seg button {
+    flex: 1; padding: 12px; border-radius: 13px; cursor: pointer;
+    background: rgba(255,255,255,0.06); border: 1.5px solid transparent;
+    color: rgba(255,255,255,0.7); font-family: var(--font-body); font-weight: 600; font-size: 13px;
+    transition: all 0.2s ease;
+  }
+  .seg button.on { background: color-mix(in srgb, var(--lime-400) 18%, transparent); border-color: var(--lime-400); color: var(--lime-300); }
+
+  .switch-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+  .switch-row .sl { font-size: 14px; font-weight: 600; }
+  .switch-row .sd { font-size: 11.5px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+  .toggle { width: 50px; height: 30px; border-radius: 999px; background: rgba(255,255,255,0.15); position: relative; cursor: pointer; transition: background 0.25s ease; flex-shrink: 0; border: none; }
+  .toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform 0.25s cubic-bezier(0.16,1,0.3,1); }
+  .toggle.on { background: var(--leaf-500); }
+  .toggle.on::after { transform: translateX(20px); }
+
+  .set-status { font-size: 12px; padding: 10px 12px; border-radius: 12px; margin-top: 14px; display: none; }
+  .set-status.show { display: block; }
+  .set-status.ok { background: rgba(52,211,153,0.12); color: #6EE7B7; border: 1px solid rgba(52,211,153,0.3); }
+  .set-status.err { background: rgba(251,113,133,0.12); color: #FDA4AF; border: 1px solid rgba(251,113,133,0.3); }
+  .set-status.info { background: rgba(163,230,53,0.1); color: var(--lime-300); border: 1px solid rgba(163,230,53,0.25); }
+
+  /* ============ SPLASH ============ */
+  .splash {
+    position: absolute; inset: 0; z-index: 50;
+    background:
+      radial-gradient(120% 80% at 50% 30%, rgba(47,165,106,0.3), transparent 60%),
+      linear-gradient(180deg, var(--forest-800), var(--forest-900));
+    display: grid; place-items: center;
+    transition: opacity 0.5s ease, visibility 0.5s ease;
+  }
+  .splash.hide { opacity: 0; visibility: hidden; }
+  .splash-inner { text-align: center; }
+  .splash .orb {
+    width: 110px; height: 110px; border-radius: 34px; margin: 0 auto 22px;
+    background: linear-gradient(135deg, var(--lime-400), var(--leaf-500));
+    display: grid; place-items: center; font-size: 56px;
+    box-shadow: 0 20px 60px rgba(163,230,53,0.4);
+    animation: orbIn 0.8s cubic-bezier(0.16,1,0.3,1) both, breathe 3s ease-in-out 0.8s infinite;
+  }
+  @keyframes orbIn { from { transform: scale(0.4) rotate(-20deg); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes breathe { 0%,100%{ transform: scale(1);} 50%{ transform: scale(1.05);} }
+  .splash .stitle { font-family: var(--font-display); font-weight: 900; font-size: 34px; letter-spacing: -0.8px; animation: fadeUp 0.6s ease 0.3s both; }
+  .splash .stitle b { color: var(--lime-300); }
+  .splash .stag { font-size: 13px; color: rgba(255,255,255,0.6); margin-top: 6px; animation: fadeUp 0.6s ease 0.5s both; }
+  .splash .loadbar { width: 120px; height: 4px; border-radius: 3px; background: rgba(255,255,255,0.12); margin: 26px auto 0; overflow: hidden; animation: fadeUp 0.6s ease 0.7s both; }
+  .splash .loadbar i { display: block; height: 100%; width: 40%; border-radius: 3px; background: var(--lime-400); animation: load 1.6s ease-in-out infinite; }
+  @keyframes load { 0%{ transform: translateX(-100%);} 100%{ transform: translateX(320%);} }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(10px);} to { opacity: 1; transform: none;} }
+
+  /* toast */
+  .toast {
+    position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%) translateY(20px);
+    z-index: 40; background: rgba(10,31,23,0.95); border: 1px solid var(--glass-line);
+    color: var(--paper); padding: 12px 18px; border-radius: 14px; font-size: 13px; font-weight: 500;
+    opacity: 0; pointer-events: none; transition: all 0.3s ease; max-width: 80%; text-align: center;
+    backdrop-filter: blur(12px);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  }
+
+  :focus-visible { outline: 2px solid var(--lime-400); outline-offset: 2px; }
+
+  /* ── WhatsApp / in-app browser warning ── */
+  .wa-banner {
+    display: none;
+    position: fixed; inset: 0; z-index: 999;
+    background: rgba(4,21,15,0.97);
+    flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 32px 28px; gap: 16px;
+  }
+  .wa-banner.show { display: flex; }
+  .wa-banner .wb-ic { font-size: 58px; }
+  .wa-banner h2 { font-size: 22px; font-weight: 800; line-height: 1.2; }
+  .wa-banner p { font-size: 14px; color: rgba(255,255,255,0.7); line-height: 1.6; max-width: 300px; }
+  .wa-banner .wb-steps {
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 16px; padding: 16px 18px; text-align: left; max-width: 320px; width: 100%;
+  }
+  .wa-banner .wb-steps p { font-size: 13.5px; color: rgba(255,255,255,0.85); margin: 6px 0; max-width: none; }
+  .wa-banner .wb-steps b { color: var(--lime-300); }
+  .wa-banner .wb-btn {
+    margin-top: 6px; padding: 15px 32px; border-radius: 16px; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--lime-400), var(--leaf-500));
+    color: var(--forest-900); font-weight: 800; font-size: 15px;
+    width: 100%; max-width: 320px;
+  }
+  .wa-banner .wb-skip {
+    font-size: 12px; color: rgba(255,255,255,0.4); cursor: pointer; text-decoration: underline;
+  }
+</style>
+</head>
+<body>
+
+<div class="device" id="app">
+
+  <!-- WhatsApp / in-app browser warning -->
+  <div class="wa-banner" id="waBanner">
+    <div class="wb-ic">📱</div>
+    <h2>Open in Chrome<br>to use LeafDoctor</h2>
+    <p>WhatsApp's browser can't access the camera. You need to open this in Chrome (or Safari on iPhone).</p>
+    <div class="wb-steps">
+      <p>🤖 <b>Android:</b> Tap ⋮ (top-right) → <b>Open in Chrome</b></p>
+      <p>🍎 <b>iPhone:</b> Tap ⋯ (bottom) → <b>Open in Safari</b></p>
+      <p>🌐 <b>Or:</b> Copy the link and paste it in Chrome</p>
+    </div>
+    <button class="wb-btn" onclick="copyLink()">📋 Copy link to open in Chrome</button>
+    <span class="wb-skip" onclick="document.getElementById('waBanner').classList.remove('show')">Continue anyway (camera may not work)</span>
+  </div>
+
+  <!-- SPLASH -->
+  <div class="splash" id="splash">
+    <div class="splash-inner">
+      <div class="orb">🌿</div>
+      <div class="stitle">Leaf<b>Doctor</b></div>
+      <div class="stag">AI plant health, in your pocket</div>
+      <div class="loadbar"><i></i></div>
+    </div>
+  </div>
+
+  <!-- HEADER -->
+  <div class="appbar">
+    <div class="brand">
+      <div class="mark">🌿</div>
+      <div class="name">Leaf<b>Doctor</b></div>
+    </div>
+    <button class="status-pill" id="statusPill" onclick="openSettings()">
+      <span class="dot"></span><span id="statusLabel">Not connected</span>
+    </button>
+  </div>
+
+  <!-- STAGE -->
+  <div class="stage">
+
+    <!-- SCAN SCREEN -->
+    <section class="screen active" id="scanScreen">
+      <div class="scan-hero">
+        <h1>Scan a leaf</h1>
+        <p>Point the camera at a leaf and tap to diagnose</p>
+      </div>
+
+      <div class="viewport" id="viewport">
+        <div class="vp-placeholder" id="vpPlaceholder">
+          <span class="leaf">🍃</span>
+          <p>Tap the camera button to begin</p>
+        </div>
+        <div class="reticle">
+          <span class="corner tl"></span><span class="corner tr"></span>
+          <span class="corner bl"></span><span class="corner br"></span>
+        </div>
+        <div class="scanbeam"></div>
+        <div class="analyze" id="analyze">
+          <div class="spinner"></div>
+          <div class="lbl">Analysing leaf…</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="icon-btn" id="camToggle" onclick="toggleCamera()" aria-label="Start or stop camera">📷</button>
+        <button class="shutter" id="shutter" onclick="diagnose()" aria-label="Diagnose leaf" disabled>
+          <span class="ring"></span>
+          <span class="core">🔍</span>
+        </button>
+        <button class="icon-btn" onclick="openSettings()" aria-label="Settings">⚙️</button>
+      </div>
+
+      <div class="hint" id="scanHint">Turn on the camera, or enable Demo mode in settings</div>
+    </section>
+
+    <!-- GUIDE SCREEN -->
+    <section class="screen" id="guideScreen">
+      <h2 class="page-title">Leaf guide</h2>
+      <p class="page-sub">The four conditions LeafDoctor can recognise</p>
+      <div id="guideCards"></div>
+    </section>
+
+    <!-- ABOUT SCREEN -->
+    <section class="screen" id="aboutScreen">
+      <h2 class="page-title">About</h2>
+      <p class="page-sub">A young scientist's plant doctor</p>
+
+      <div class="about-hero">
+        <div class="big">🌾</div>
+        <h2>Saving crops with AI</h2>
+        <p>Indian farmers lose nearly 40% of crops to undiagnosed plant disease. LeafDoctor puts a plant expert in everyone's pocket — trained on hundreds of real leaf photos.</p>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat"><div class="n">4</div><div class="l">Conditions</div></div>
+        <div class="stat"><div class="n">2s</div><div class="l">Per scan</div></div>
+        <div class="stat"><div class="n">2</div><div class="l">Languages</div></div>
+      </div>
+
+      <div class="steps">
+        <h3>How it works</h3>
+        <div class="step"><div class="num">1</div><div class="txt">Hundreds of leaf photos teach the AI what healthy and sick leaves look like.</div></div>
+        <div class="step"><div class="num">2</div><div class="txt">The camera captures a leaf and the AI compares it to what it learned.</div></div>
+        <div class="step"><div class="num">3</div><div class="txt">In seconds, it speaks the diagnosis aloud in English or Hindi.</div></div>
+      </div>
+
+      <p style="text-align:center; font-size:11.5px; color:rgba(255,255,255,0.4); margin-top:18px;">Made for the Vasudha Science Exhibition · Class IV</p>
+    </section>
+
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav class="tabbar">
+    <button class="tab active" id="tab-scan" onclick="showTab('scan')"><span class="ti">📷</span>Scan</button>
+    <button class="tab" id="tab-guide" onclick="showTab('guide')"><span class="ti">🌱</span>Guide</button>
+    <button class="tab" id="tab-about" onclick="showTab('about')"><span class="ti">ℹ️</span>About</button>
+  </nav>
+
+  <!-- RESULT SHEET -->
+  <div class="scrim" id="scrim" onclick="closeSheet()"></div>
+  <div class="sheet" id="sheet">
+    <div class="grabber"></div>
+    <div class="result-top">
+      <div class="ring-wrap">
+        <svg width="96" height="96" viewBox="0 0 96 96">
+          <circle class="track" cx="48" cy="48" r="42" fill="none" stroke-width="8"></circle>
+          <circle class="fill" id="ringFill" cx="48" cy="48" r="42" fill="none" stroke-width="8"
+                  stroke-dasharray="263.9" stroke-dashoffset="263.9"></circle>
+        </svg>
+        <div class="pct" id="ringPct">0%</div>
+      </div>
+      <div class="result-id">
+        <div class="tag" id="resTag">Result</div>
+        <div class="nm"><span class="em" id="resEmoji">🌿</span> <span id="resName">—</span></div>
+      </div>
+    </div>
+
+    <div class="hydro">
+      <div class="hydro-head">
+        <span class="hydro-ic">💧</span>
+        <div class="hydro-meta">
+          <span class="hydro-label">Estimated water level</span>
+          <span class="hydro-note" id="hydroNote">—</span>
+        </div>
+        <span class="hydro-val" id="hydroVal">0%</span>
+      </div>
+      <div class="hydro-track"><div class="hydro-fill" id="hydroFill"></div></div>
+    </div>
+
+    <div class="advice" id="resAdvice"></div>
+
+    <div class="breakdown-title">Confidence breakdown</div>
+    <div id="breakdown"></div>
+
+    <div class="sheet-actions">
+      <button class="btn-block" onclick="closeSheet(); ensureScanReady();">🔍 Scan another leaf</button>
+    </div>
+  </div>
+
+  <!-- SETTINGS SHEET -->
+  <div class="scrim" id="setScrim" onclick="closeSettings()"></div>
+  <div class="set-sheet" id="setSheet">
+    <div class="grabber"></div>
+    <h3>Settings</h3>
+    <p class="sub">Connect your AI model and choose how results are shown</p>
+
+    <div class="field-label">Teachable Machine model URL</div>
+    <input class="url-input" id="modelUrl" type="url" inputmode="url" autocomplete="off"
+           placeholder="https://teachablemachine.withgoogle.com/models/…/" />
+    <button class="btn-block" style="margin-top:12px;" onclick="connectModel()">Connect model</button>
+    <div class="set-status" id="setStatus"></div>
+
+    <div class="field-label">Voice language</div>
+    <div class="seg lang-seg" id="langSeg"></div>
+
+    <div style="margin-top:8px;">
+      <div class="switch-row">
+        <div><div class="sl">Voice output</div><div class="sd">Speak the diagnosis aloud</div></div>
+        <button class="toggle on" id="tgVoice" onclick="toggleVoice()" aria-label="Toggle voice"></button>
+      </div>
+      <div class="switch-row">
+        <div><div class="sl">Demo mode</div><div class="sd">Try the app without a trained model</div></div>
+        <button class="toggle" id="tgDemo" onclick="toggleDemo()" aria-label="Toggle demo mode"></button>
+      </div>
+    </div>
+
+    <button class="btn-block" style="margin-top:20px; background:rgba(255,255,255,0.08); color:var(--paper);" onclick="closeSettings()">Done</button>
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+</div>
+
+<!-- Teachable Machine + TensorFlow.js -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+<script>
+/* =====================================================================
+   LeafDoctor V3 — state
+   ===================================================================== */
+const CLASSES = {
+  Healthy: {
+    tag: "Healthy", emoji: "✅", color: "#34D399",
+    indicators: [
+      "Vibrant, uniform green with no patches",
+      "Firm, supple and flat — not dry or limp",
+      "Smooth, unbroken edges, no browning or curling"
+    ],
+    en: "This leaf looks healthy. Keep giving the plant regular sunlight and water, and check on it every few days.",
+    hi: "यह पत्ती स्वस्थ दिख रही है। पौधे को नियमित धूप और पानी देते रहें और कुछ दिनों में जांचते रहें।",
+    bn: "এই পাতাটি সুস্থ দেখাচ্ছে। গাছটিকে নিয়মিত রোদ ও জল দিন এবং কয়েক দিন অন্তর পরীক্ষা করুন।",
+    mr: "हे पान निरोगी दिसत आहे. झाडाला नियमित सूर्यप्रकाश आणि पाणी द्या आणि काही दिवसांनी तपासा.",
+    ta: "இந்த இலை ஆரோக்கியமாக உள்ளது. செடிக்கு வழக்கமாக சூரிய ஒளியும் தண்ணீரும் கொடுங்கள், சில நாட்களுக்கு ஒருமுறை சரிபார்க்கவும்.",
+    pa: "ਇਹ ਪੱਤਾ ਤੰਦਰੁਸਤ ਲੱਗ ਰਿਹਾ ਹੈ। ਪੌਦੇ ਨੂੰ ਨਿਯਮਿਤ ਧੁੱਪ ਅਤੇ ਪਾਣੀ ਦਿੰਦੇ ਰਹੋ ਅਤੇ ਕੁਝ ਦਿਨਾਂ ਬਾਅਦ ਜਾਂਚਦੇ ਰਹੋ।",
+    gu: "આ પાન સ્વસ્થ દેખાય છે. છોડને નિયમિત તડકો અને પાણી આપતા રહો અને થોડા દિવસે તપાસતા રહો.",
+    te: "ఈ ఆకు ఆరోగ్యంగా ఉంది. మొక్కకు క్రమం తప్పకుండా ఎండ, నీరు ఇవ్వండి మరియు కొన్ని రోజులకోసారి పరిశీలించండి.",
+    kn: "ಈ ಎಲೆ ಆರೋಗ್ಯಕರವಾಗಿದೆ. ಗಿಡಕ್ಕೆ ನಿಯಮಿತವಾಗಿ ಬಿಸಿಲು ಮತ್ತು ನೀರು ಕೊಡುತ್ತಿರಿ ಮತ್ತು ಕೆಲ ದಿನಗಳಿಗೊಮ್ಮೆ ಪರಿಶೀಲಿಸಿ."
+  },
+  Pest: {
+    tag: "Pest damage", emoji: "🐛", color: "#F97316",
+    indicators: [
+      "Holes or chewed, ragged edges",
+      "Sticky residue, webbing or silver trails",
+      "Tiny insects or mites, often under the leaf"
+    ],
+    en: "Pests are attacking this leaf — look for insects or mites underneath. Pick them off by hand or spray a mild neem-oil solution, and check the nearby plants too.",
+    hi: "इस पत्ती पर कीड़े हमला कर रहे हैं — पत्ती के नीचे कीड़े या माइट देखें। उन्हें हाथ से हटाएं या नीम तेल का हल्का छिड़काव करें, और पास के पौधे भी जांचें।",
+    bn: "এই পাতায় পোকা আক্রমণ করছে — পাতার নিচে পোকা বা মাইট খুঁজুন। হাত দিয়ে সরিয়ে ফেলুন বা হালকা নিম তেল স্প্রে করুন, এবং কাছের গাছগুলিও পরীক্ষা করুন।",
+    mr: "या पानावर किडे हल्ला करत आहेत — पानाखाली किडे किंवा कोळी पहा. हाताने काढून टाका किंवा सौम्य कडुलिंब तेलाची फवारणी करा, आणि जवळची झाडेही तपासा.",
+    ta: "இந்த இலையை பூச்சிகள் தாக்குகின்றன — இலையின் அடியில் பூச்சிகள் அல்லது சிலந்திகளைப் பாருங்கள். கையால் அகற்றுங்கள் அல்லது லேசான வேப்பெண்ணெய் தெளியுங்கள், அருகிலுள்ள செடிகளையும் சரிபார்க்கவும்.",
+    pa: "ਇਸ ਪੱਤੇ ਉੱਤੇ ਕੀੜੇ ਹਮਲਾ ਕਰ ਰਹੇ ਹਨ — ਪੱਤੇ ਦੇ ਹੇਠਾਂ ਕੀੜੇ ਜਾਂ ਮਾਈਟ ਵੇਖੋ। ਉਨ੍ਹਾਂ ਨੂੰ ਹੱਥ ਨਾਲ ਹਟਾਓ ਜਾਂ ਹਲਕਾ ਨਿੰਮ ਤੇਲ ਛਿੜਕੋ, ਅਤੇ ਨੇੜਲੇ ਪੌਦੇ ਵੀ ਜਾਂਚੋ।",
+    gu: "આ પાન પર જીવાત હુમલો કરી રહી છે — પાનની નીચે જીવાત કે કથીરી જુઓ. તેમને હાથથી દૂર કરો અથવા હળવું લીમડાનું તેલ છાંટો, અને નજીકના છોડ પણ તપાસો.",
+    te: "ఈ ఆకుపై పురుగులు దాడి చేస్తున్నాయి — ఆకు కింద పురుగులు లేదా పేనులను చూడండి. వాటిని చేత్తో తీసివేయండి లేదా తేలికపాటి వేప నూనె పిచికారీ చేయండి, పక్కనున్న మొక్కలను కూడా పరిశీలించండి.",
+    kn: "ಈ ಎಲೆಯ ಮೇಲೆ ಕೀಟಗಳು ದಾಳಿ ಮಾಡುತ್ತಿವೆ — ಎಲೆಯ ಕೆಳಗೆ ಕೀಟಗಳು ಅಥವಾ ಮೈಟ್‌ಗಳನ್ನು ನೋಡಿ. ಅವುಗಳನ್ನು ಕೈಯಿಂದ ತೆಗೆಯಿರಿ ಅಥವಾ ಮೃದು ಬೇವಿನ ಎಣ್ಣೆ ಸಿಂಪಡಿಸಿ, ಹತ್ತಿರದ ಗಿಡಗಳನ್ನೂ ಪರಿಶೀಲಿಸಿ."
+  },
+  WaterStress: {
+    tag: "Water stress", emoji: "💧", color: "#38BDF8",
+    indicators: [
+      "Drooping, wilting or curled edges",
+      "Yellowing with dry, papery patches",
+      "Too little water — or too much (root rot)"
+    ],
+    en: "This leaf is water-stressed — drooping or yellowing means too little or too much water. Check the soil: water it if dry, and improve drainage if it feels soggy.",
+    hi: "इस पत्ती में पानी की समस्या है — मुरझाना या पीलापन कम या ज़्यादा पानी दिखाता है। मिट्टी जांचें: सूखी हो तो पानी दें, गीली हो तो जल निकासी सुधारें।",
+    bn: "এই পাতায় জলের সমস্যা — নেতিয়ে পড়া বা হলুদ হওয়া মানে খুব কম বা বেশি জল। মাটি পরীক্ষা করুন: শুকনো হলে জল দিন, ভেজা হলে নিকাশি ব্যবস্থা ভালো করুন।",
+    mr: "या पानाला पाण्याची समस्या आहे — कोमेजणे किंवा पिवळे पडणे म्हणजे खूप कमी किंवा जास्त पाणी. माती तपासा: कोरडी असल्यास पाणी द्या, ओली असल्यास निचरा सुधारा.",
+    ta: "இந்த இலைக்கு தண்ணீர் பிரச்சினை — வாடுதல் அல்லது மஞ்சள் நிறம் மிகக் குறைவான அல்லது அதிக தண்ணீரைக் குறிக்கிறது. மண்ணைச் சரிபார்க்கவும்: உலர்ந்திருந்தால் தண்ணீர் ஊற்றவும், ஈரமாக இருந்தால் வடிகாலை மேம்படுத்தவும்.",
+    pa: "ਇਸ ਪੱਤੇ ਵਿੱਚ ਪਾਣੀ ਦੀ ਸਮੱਸਿਆ ਹੈ — ਮੁਰਝਾਉਣਾ ਜਾਂ ਪੀਲਾ ਪੈਣਾ ਘੱਟ ਜਾਂ ਵੱਧ ਪਾਣੀ ਦਰਸਾਉਂਦਾ ਹੈ। ਮਿੱਟੀ ਜਾਂਚੋ: ਸੁੱਕੀ ਹੋਵੇ ਤਾਂ ਪਾਣੀ ਦਿਓ, ਗਿੱਲੀ ਹੋਵੇ ਤਾਂ ਨਿਕਾਸੀ ਸੁਧਾਰੋ।",
+    gu: "આ પાનને પાણીની સમસ્યા છે — કરમાવું કે પીળું પડવું એ ઓછું કે વધુ પાણી દર્શાવે છે. માટી તપાસો: સૂકી હોય તો પાણી આપો, ભીની હોય તો નિકાલ સુધારો.",
+    te: "ఈ ఆకుకు నీటి సమస్య — వాడిపోవడం లేదా పసుపు రంగు తక్కువ లేదా ఎక్కువ నీటిని సూచిస్తుంది. మట్టిని పరిశీలించండి: పొడిగా ఉంటే నీరు పోయండి, తడిగా ఉంటే నీటి పారుదల మెరుగుపరచండి.",
+    kn: "ಈ ಎಲೆಗೆ ನೀರಿನ ಸಮಸ್ಯೆ — ಬಾಡುವುದು ಅಥವಾ ಹಳದಿ ಬಣ್ಣ ಕಡಿಮೆ ಅಥವಾ ಹೆಚ್ಚು ನೀರನ್ನು ಸೂಚಿಸುತ್ತದೆ. ಮಣ್ಣನ್ನು ಪರಿಶೀಲಿಸಿ: ಒಣಗಿದ್ದರೆ ನೀರು ಹಾಕಿ, ಒದ್ದೆಯಾಗಿದ್ದರೆ ಒಳಚರಂಡಿ ಸುಧಾರಿಸಿ."
+  },
+  Dead: {
+    tag: "Dead", emoji: "💀", color: "#94A3B8",
+    indicators: [
+      "Entirely brown, dry and shrivelled",
+      "Brittle — falls off easily when touched",
+      "Natural ageing or severe dehydration"
+    ],
+    en: "This leaf is dead or severely dried out. Remove it gently and check whether the rest of the plant needs water or care.",
+    hi: "यह पत्ती मर चुकी है या पूरी तरह सूख गई है। इसे धीरे से हटाएं और देखें कि बाकी पौधे को पानी या देखभाल की जरूरत है या नहीं।",
+    bn: "এই পাতাটি মরে গেছে বা সম্পূর্ণ শুকিয়ে গেছে। আলতো করে সরিয়ে ফেলুন এবং দেখুন গাছের বাকি অংশের জল বা যত্ন দরকার কিনা।",
+    mr: "हे पान मेलेले किंवा पूर्णपणे वाळलेले आहे. हळूवारपणे काढून टाका आणि उरलेल्या झाडाला पाणी किंवा काळजीची गरज आहे का ते पहा.",
+    ta: "இந்த இலை இறந்துவிட்டது அல்லது முற்றிலும் உலர்ந்துவிட்டது. மெதுவாக அகற்றி, மீதமுள்ள செடிக்கு தண்ணீர் அல்லது பராமரிப்பு தேவையா என்று பாருங்கள்.",
+    pa: "ਇਹ ਪੱਤਾ ਮਰ ਚੁੱਕਾ ਹੈ ਜਾਂ ਪੂਰੀ ਤਰ੍ਹਾਂ ਸੁੱਕ ਗਿਆ ਹੈ। ਇਸਨੂੰ ਹੌਲੀ ਨਾਲ ਹਟਾਓ ਅਤੇ ਵੇਖੋ ਕਿ ਬਾਕੀ ਪੌਦੇ ਨੂੰ ਪਾਣੀ ਜਾਂ ਦੇਖਭਾਲ ਦੀ ਲੋੜ ਹੈ ਜਾਂ ਨਹੀਂ।",
+    gu: "આ પાન મરી ગયું છે અથવા સંપૂર્ણ સૂકાઈ ગયું છે. તેને હળવેથી દૂર કરો અને જુઓ કે બાકીના છોડને પાણી કે કાળજીની જરૂર છે કે નહીં.",
+    te: "ఈ ఆకు చనిపోయింది లేదా పూర్తిగా ఎండిపోయింది. దాన్ని మెల్లగా తీసివేసి, మిగిలిన మొక్కకు నీరు లేదా సంరక్షణ అవసరమా అని చూడండి.",
+    kn: "ಈ ಎಲೆ ಸತ್ತಿದೆ ಅಥವಾ ಸಂಪೂರ್ಣವಾಗಿ ಒಣಗಿದೆ. ಅದನ್ನು ನಿಧಾನವಾಗಿ ತೆಗೆದು, ಉಳಿದ ಗಿಡಕ್ಕೆ ನೀರು ಅಥವಾ ಆರೈಕೆ ಬೇಕೇ ಎಂದು ನೋಡಿ."
+  }
+};
+const CLASS_ORDER = ["Healthy", "Pest", "WaterStress", "Dead"];
+
+// Voice languages — label shown in UI + speech-synthesis locale code
+const LANGS = {
+  en: { label: "English",  code: "en-IN" },
+  hi: { label: "हिंदी",    code: "hi-IN" },
+  bn: { label: "বাংলা",    code: "bn-IN" },
+  mr: { label: "मराठी",    code: "mr-IN" },
+  ta: { label: "தமிழ்",    code: "ta-IN" },
+  pa: { label: "ਪੰਜਾਬੀ",   code: "pa-IN" },
+  gu: { label: "ગુજરાતી",  code: "gu-IN" },
+  te: { label: "తెలుగు",   code: "te-IN" },
+  kn: { label: "ಕನ್ನಡ",    code: "kn-IN" }
+};
+
+// Estimated hydration weight per category (probability-weighted leaf water level)
+const HYDRO_WEIGHT = { Healthy: 92, Pest: 62, WaterStress: 30, Dead: 8 };
+
+// Localized hydration status (index 0=driest … 3=well hydrated)
+const HYDRO_NOTES = {
+  en: ["Critically dry", "Dry — needs water", "Getting dry", "Well hydrated"],
+  hi: ["बहुत सूखा", "सूखा — पानी चाहिए", "थोड़ा सूख रहा", "अच्छी नमी"],
+  bn: ["অত্যন্ত শুকনো", "শুকনো — জল দরকার", "শুকিয়ে যাচ্ছে", "ভালো আর্দ্রতা"],
+  mr: ["अत्यंत कोरडे", "कोरडे — पाणी हवे", "थोडे कोरडे", "चांगली ओल"],
+  ta: ["மிகவும் உலர்ந்தது", "உலர்ந்தது — தண்ணீர் தேவை", "உலர்கிறது", "நல்ல ஈரப்பதம்"],
+  pa: ["ਬਹੁਤ ਸੁੱਕਾ", "ਸੁੱਕਾ — ਪਾਣੀ ਚਾਹੀਦਾ", "ਥੋੜ੍ਹਾ ਸੁੱਕ ਰਿਹਾ", "ਚੰਗੀ ਨਮੀ"],
+  gu: ["ખૂબ સૂકું", "સૂકું — પાણી જોઈએ", "સૂકાઈ રહ્યું છે", "સારી ભેજ"],
+  te: ["చాలా పొడిగా", "పొడిగా — నీరు కావాలి", "ఎండిపోతోంది", "మంచి తేమ"],
+  kn: ["ತುಂಬಾ ಒಣಗಿದೆ", "ಒಣಗಿದೆ — ನೀರು ಬೇಕು", "ಒಣಗುತ್ತಿದೆ", "ಉತ್ತಮ ತೇವಾಂಶ"]
+};
+
+let model = null;
+let webcam = null;
+let cameraOn = false;
+let demoMode = false;
+let voiceOn = true;
+let lang = "en";
+let busy = false;
+
+const RING_CIRC = 2 * Math.PI * 42; // 263.9
+
+/* =====================================================================
+   Boot
+   ===================================================================== */
+window.addEventListener("load", () => {
+  buildGuide();
+  buildLangs();
+  setTimeout(() => document.getElementById("splash").classList.add("hide"), 2100);
+  refreshStatus();
+});
+
+function buildLangs() {
+  const seg = document.getElementById("langSeg");
+  seg.innerHTML = "";
+  Object.entries(LANGS).forEach(([code, info]) => {
+    const b = document.createElement("button");
+    b.id = "lang-" + code;
+    b.textContent = info.label;
+    if (code === lang) b.classList.add("on");
+    b.onclick = () => setLang(code);
+    seg.appendChild(b);
+  });
+}
+
+function buildGuide() {
+  const wrap = document.getElementById("guideCards");
+  CLASS_ORDER.forEach(key => {
+    const c = CLASSES[key];
+    const el = document.createElement("div");
+    el.className = "cat-card";
+    el.style.setProperty("--cat", c.color);
+    el.innerHTML = `
+      <div class="cat-head">
+        <div class="cat-ic">${c.emoji}</div>
+        <div>
+          <div class="cat-tag">${c.tag}</div>
+          <div class="cat-name">${spaceName(key)}</div>
+        </div>
+      </div>
+      <ul>${c.indicators.map(i => `<li>${i}</li>`).join("")}</ul>`;
+    wrap.appendChild(el);
+  });
+}
+function spaceName(k){ return k.replace(/([A-Z])/g, " $1").trim(); }
+
+/* =====================================================================
+   Tabs / navigation
+   ===================================================================== */
+function showTab(name) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.getElementById(name + "Screen").classList.add("active");
+  document.getElementById("tab-" + name).classList.add("active");
+}
+
+/* =====================================================================
+   Status pill
+   ===================================================================== */
+function refreshStatus() {
+  const pill = document.getElementById("statusPill");
+  const label = document.getElementById("statusLabel");
+  pill.classList.remove("ready", "demo");
+  if (model) { pill.classList.add("ready"); label.textContent = "Model ready"; }
+  else if (demoMode) { pill.classList.add("demo"); label.textContent = "Demo mode"; }
+  else { label.textContent = "Not connected"; }
+}
+
+/* =====================================================================
+   Camera
+   ===================================================================== */
+async function toggleCamera() {
+  if (cameraOn) { stopCamera(); return; }
+  if (demoMode) {
+    // demo: no real camera, just arm the shutter with a friendly viewport
+    cameraOn = true;
+    document.getElementById("vpPlaceholder").innerHTML =
+      '<span class="leaf">🍃</span><p>Demo mode — tap the green button to try a sample diagnosis</p>';
+    document.getElementById("viewport").classList.add("live");
+    document.getElementById("shutter").disabled = false;
+    document.getElementById("camToggle").textContent = "⏹";
+    document.getElementById("scanHint").textContent = "Demo mode is on — results are samples, not a real diagnosis";
+    return;
+  }
+  if (typeof tmImage === "undefined") {
+    toast("AI library still loading — try again in a moment");
+    return;
+  }
+  if (!model) {
+    toast("Connect a model first, or turn on Demo mode");
+    openSettings();
+    return;
+  }
+  try {
+    const vp = document.getElementById("viewport");
+    webcam = new tmImage.Webcam(360, 360, false); // width, height, no flip (rear-style)
+    await webcam.setup({ facingMode: "environment" });
+    await webcam.play();
+    document.getElementById("vpPlaceholder").style.display = "none";
+    vp.appendChild(webcam.canvas);
+    vp.classList.add("live");
+    cameraOn = true;
+    document.getElementById("shutter").disabled = false;
+    document.getElementById("camToggle").textContent = "⏹";
+    document.getElementById("scanHint").textContent = "Hold a leaf inside the frame, then tap to diagnose";
+    requestAnimationFrame(loop);
+  } catch (e) {
+    toast("Couldn't open the camera — check permissions");
+    console.error(e);
+  }
+}
+
+function loop() {
+  if (cameraOn && webcam) { webcam.update(); requestAnimationFrame(loop); }
+}
+
+function stopCamera() {
+  cameraOn = false;
+  if (webcam) { try { webcam.stop(); } catch(e){} webcam = null; }
+  const vp = document.getElementById("viewport");
+  vp.classList.remove("live", "scanning");
+  // remove any appended canvas/video
+  [...vp.querySelectorAll("canvas, video")].forEach(n => n.remove());
+  const ph = document.getElementById("vpPlaceholder");
+  ph.style.display = "";
+  ph.innerHTML = '<span class="leaf">🍃</span><p>Tap the camera button to begin</p>';
+  document.getElementById("shutter").disabled = true;
+  document.getElementById("camToggle").textContent = "📷";
+  document.getElementById("scanHint").textContent = "Turn on the camera, or enable Demo mode in settings";
+}
+
+function ensureScanReady() {
+  showTab("scan");
+}
+
+/* =====================================================================
+   Diagnose
+   ===================================================================== */
+async function diagnose() {
+  if (busy || !cameraOn) return;
+  busy = true;
+  const vp = document.getElementById("viewport");
+  vp.classList.add("scanning");
+  document.getElementById("analyze").classList.add("show");
+
+  // brief scan animation for feel
+  await wait(1100);
+
+  let scores;
+  try {
+    if (demoMode || !model || !webcam) {
+      scores = demoScores();
+    } else {
+      const preds = await model.predict(webcam.canvas);
+      scores = {};
+      preds.forEach(p => { scores[normalizeKey(p.className)] = p.probability; });
+      // ensure all 4 keys exist
+      CLASS_ORDER.forEach(k => { if (scores[k] == null) scores[k] = 0; });
+    }
+  } catch (e) {
+    console.error(e);
+    toast("Diagnosis failed — check the model and try again");
+    scores = demoScores();
+  }
+
+  document.getElementById("analyze").classList.remove("show");
+  vp.classList.remove("scanning");
+  busy = false;
+  presentResult(scores);
+}
+
+// map model label text to our 4 canonical keys (tolerant of spaces/case)
+function normalizeKey(label) {
+  const t = (label || "").toLowerCase().replace(/[^a-z]/g, "");
+  if (t.includes("healthy")) return "Healthy";
+  if (t.includes("dead") || t.includes("senescent") || t.includes("dried")) return "Dead";
+  if (t.includes("pest") || t.includes("mite") || t.includes("insect") || t.includes("beetle") ||
+      t.includes("worm") || t.includes("aphid") || t.includes("borer") || t.includes("thrip") ||
+      t.includes("leafminer") || t.includes("bug") || t.includes("caterpillar")) return "Pest";
+  if (t.includes("water") || t.includes("wilt") || t.includes("drought") || t.includes("stress") ||
+      t.includes("dehydrat") || t.includes("droop")) return "WaterStress";
+  // fallback: try exact match against keys
+  const exact = CLASS_ORDER.find(k => k.toLowerCase() === t);
+  return exact || "Healthy";
+}
+
+function demoScores() {
+  // pick a random "winner" and build plausible distribution
+  const winner = CLASS_ORDER[Math.floor(Math.random() * CLASS_ORDER.length)];
+  let remaining = 1;
+  const top = 0.74 + Math.random() * 0.2; // 74–94%
+  const s = {}; s[winner] = top; remaining -= top;
+  const others = CLASS_ORDER.filter(k => k !== winner);
+  others.forEach((k, i) => {
+    const v = i === others.length - 1 ? remaining : remaining * (0.3 + Math.random() * 0.4);
+    s[k] = Math.max(0, v); remaining -= s[k];
+  });
+  return s;
+}
+
+/* =====================================================================
+   Present result sheet
+   ===================================================================== */
+function presentResult(scores) {
+  // winner
+  let winKey = CLASS_ORDER[0], winVal = -1;
+  CLASS_ORDER.forEach(k => { if (scores[k] > winVal) { winVal = scores[k]; winKey = k; } });
+  const c = CLASSES[winKey];
+  const pct = Math.round(winVal * 100);
+
+  // theme the sheet
+  const sheet = document.getElementById("sheet");
+  sheet.style.setProperty("--cat", c.color);
+
+  document.getElementById("resTag").textContent = c.tag;
+  document.getElementById("resName").textContent = spaceName(winKey);
+  document.getElementById("resEmoji").textContent = c.emoji;
+  const adviceText = c[lang] || c.en;
+  document.getElementById("resAdvice").textContent = adviceText;
+
+  // estimated hydration (probability-weighted leaf water level)
+  let hydration = 0;
+  CLASS_ORDER.forEach(k => hydration += (scores[k] || 0) * HYDRO_WEIGHT[k]);
+  hydration = Math.max(0, Math.min(100, Math.round(hydration)));
+  const level = hydration >= 70 ? 3 : hydration >= 40 ? 2 : hydration >= 20 ? 1 : 0;
+  const notes = HYDRO_NOTES[lang] || HYDRO_NOTES.en;
+  document.getElementById("hydroNote").textContent = notes[level];
+  document.getElementById("hydroVal").textContent = "0%";
+  const hydroFill = document.getElementById("hydroFill");
+  hydroFill.style.width = "0%";
+
+  // ring
+  const ring = document.getElementById("ringFill");
+  ring.style.stroke = c.color;
+  ring.style.strokeDashoffset = RING_CIRC; // reset
+  document.getElementById("ringPct").textContent = "0%";
+
+  // breakdown
+  const bd = document.getElementById("breakdown");
+  bd.innerHTML = "";
+  CLASS_ORDER.slice().sort((a,b)=>scores[b]-scores[a]).forEach(k => {
+    const v = Math.round((scores[k] || 0) * 100);
+    const item = document.createElement("div");
+    item.className = "bd-item";
+    item.innerHTML = `
+      <div class="bd-row"><span>${spaceName(k)}</span><span class="v">${v}%</span></div>
+      <div class="bd-track"><div class="bd-fill" data-w="${v}" style="background:${CLASSES[k].color}"></div></div>`;
+    bd.appendChild(item);
+  });
+
+  // show
+  document.getElementById("scrim").classList.add("show");
+  sheet.classList.add("show");
+
+  // animate ring + bars + count up
+  requestAnimationFrame(() => {
+    ring.style.strokeDashoffset = RING_CIRC * (1 - pct/100);
+    bd.querySelectorAll(".bd-fill").forEach(f => f.style.width = f.dataset.w + "%");
+    countUp(document.getElementById("ringPct"), pct);
+    hydroFill.style.width = hydration + "%";
+    countUp(document.getElementById("hydroVal"), hydration);
+  });
+
+  if (voiceOn) speak(adviceText);
+}
+
+function countUp(el, target) {
+  let n = 0;
+  const step = Math.max(1, Math.round(target / 28));
+  const id = setInterval(() => {
+    n += step;
+    if (n >= target) { n = target; clearInterval(id); }
+    el.textContent = n + "%";
+  }, 24);
+}
+
+function closeSheet() {
+  document.getElementById("sheet").classList.remove("show");
+  document.getElementById("scrim").classList.remove("show");
+  window.speechSynthesis && window.speechSynthesis.cancel();
+}
+
+/* =====================================================================
+   Settings
+   ===================================================================== */
+function openSettings() {
+  document.getElementById("setScrim").classList.add("show");
+  document.getElementById("setSheet").classList.add("show");
+}
+function closeSettings() {
+  document.getElementById("setScrim").classList.remove("show");
+  document.getElementById("setSheet").classList.remove("show");
+}
+
+async function connectModel() {
+  let url = document.getElementById("modelUrl").value.trim();
+  if (!url) { setStat("Paste your model URL first", "err"); return; }
+  if (!url.endsWith("/")) url += "/";
+
+  if (typeof tmImage === "undefined") {
+    setStat("AI library still loading — wait a moment and try again", "err");
+    return;
+  }
+  setStat("Connecting to your model…", "info");
+  try {
+    model = await tmImage.load(url + "model.json", url + "metadata.json");
+    const labels = model.getClassLabels().join(", ");
+    setStat("Connected. Classes: " + labels, "ok");
+    if (demoMode) { demoMode = false; document.getElementById("tgDemo").classList.remove("on"); }
+    refreshStatus();
+    toast("Model connected ✓");
+  } catch (e) {
+    console.error(e);
+    model = null;
+    setStat("Couldn't load the model. Check the URL ends with “/” and you're online.", "err");
+    refreshStatus();
+  }
+}
+
+function setStat(msg, kind) {
+  const el = document.getElementById("setStatus");
+  el.className = "set-status show " + kind;
+  el.textContent = msg;
+}
+
+function setLang(l) {
+  lang = l;
+  Object.keys(LANGS).forEach(code => {
+    const btn = document.getElementById("lang-" + code);
+    if (btn) btn.classList.toggle("on", code === l);
+  });
+}
+
+function toggleVoice() {
+  voiceOn = !voiceOn;
+  document.getElementById("tgVoice").classList.toggle("on", voiceOn);
+}
+
+function toggleDemo() {
+  demoMode = !demoMode;
+  document.getElementById("tgDemo").classList.toggle("on", demoMode);
+  if (demoMode && cameraOn) stopCamera();
+  refreshStatus();
+  toast(demoMode ? "Demo mode on — sample results" : "Demo mode off");
+}
+
+/* =====================================================================
+   Voice
+   ===================================================================== */
+function speak(text) {
+  try {
+    if (!window.speechSynthesis) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = (LANGS[lang] && LANGS[lang].code) || "en-IN";
+    u.rate = 0.95;
+    // prefer a voice that matches the language, if the device has one
+    const base = u.lang.split("-")[0];
+    const voices = window.speechSynthesis.getVoices() || [];
+    const match = voices.find(v => v.lang && v.lang.toLowerCase().startsWith(base));
+    if (match) u.voice = match;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+  } catch(e){}
+}
+
+/* =====================================================================
+   Helpers
+   ===================================================================== */
+function wait(ms){ return new Promise(r => setTimeout(r, ms)); }
+let toastTimer;
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+/* =====================================================================
+   WhatsApp / in-app browser detection
+   ===================================================================== */
+function isInAppBrowser() {
+  const ua = navigator.userAgent || "";
+  return /FBAN|FBAV|Instagram|WhatsApp|MicroMessenger|Line|wv|WebView/.test(ua)
+    || (/(iPhone|iPod|iPad).*AppleWebKit(?!.*Safari)/i.test(ua))
+    || (window.navigator.standalone === false && /iPhone|iPad/.test(ua) && !/Safari/.test(ua));
+}
+
+function copyLink() {
+  const url = window.location.href;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(() => {
+      toast("Link copied — paste it in Chrome!");
+    }).catch(() => fallbackCopy(url));
+  } else {
+    fallbackCopy(url);
+  }
+}
+
+function fallbackCopy(url) {
+  const el = document.createElement("textarea");
+  el.value = url;
+  el.style.position = "fixed"; el.style.opacity = "0";
+  document.body.appendChild(el); el.focus(); el.select();
+  try { document.execCommand("copy"); toast("Link copied — paste it in Chrome!"); }
+  catch(e) { toast("Copy failed — manually copy the URL from your address bar"); }
+  document.body.removeChild(el);
+}
+
+// Check on load — after a brief delay so the splash shows first
+setTimeout(() => {
+  if (isInAppBrowser()) {
+    document.getElementById("waBanner").classList.add("show");
+  }
+}, 500);
+</script>
+</body>
+</html>
